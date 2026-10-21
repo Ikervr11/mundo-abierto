@@ -1,0 +1,371 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Open World Realistic</title>
+
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #9fc9df;
+      font-family: Arial, sans-serif;
+    }
+    canvas { display: block; }
+
+    #hud {
+      position: fixed;
+      top: 18px;
+      left: 18px;
+      color: white;
+      background: #101b20bb;
+      padding: 14px 17px;
+      border-radius: 10px;
+      line-height: 1.6;
+      pointer-events: none;
+      text-shadow: 0 1px 3px #000;
+    }
+
+    #help {
+      position: fixed;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: white;
+      background: #101b20cc;
+      padding: 12px 18px;
+      border-radius: 10px;
+      text-align: center;
+      width: max-content;
+      max-width: 92%;
+      font-size: 14px;
+    }
+
+    #start {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      background: #101b2070;
+      color: white;
+      text-align: center;
+    }
+
+    #start button {
+      padding: 14px 24px;
+      border: 0;
+      border-radius: 8px;
+      background: #b6e0bd;
+      font-size: 17px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+  </style>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.180.0/build/three.module.js"
+    }
+  }
+  </script>
+</head>
+
+<body>
+  <div id="hud">
+    <strong>OPEN WORLD</strong><br>
+    Exploración libre<br>
+    <span id="position">Posición: 0, 0</span>
+  </div>
+
+  <div id="help">
+    W A S D: moverte · Ratón: mirar · ESC: liberar ratón
+  </div>
+
+  <div id="start">
+    <div>
+      <h1>OPEN WORLD REALISTIC</h1>
+      <p>Explora tu primer mundo 3D</p>
+      <button id="play">ENTRAR AL MUNDO</button>
+    </div>
+  </div>
+
+  <script type="module">
+    import * as THREE from 'three';
+
+    // 1. ESCENA Y CÁMARA
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x9fc9df);
+    scene.fog = new THREE.Fog(0x9fc9df, 65, 240);
+
+    const camera = new THREE.PerspectiveCamera(
+      70, innerWidth / innerHeight, 0.1, 600
+    );
+
+    const renderer = new THREE.WebGLRenderer({
+      antialias: true,
+      powerPreference: 'high-performance'
+    });
+
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.15;
+    document.body.appendChild(renderer.domElement);
+
+    // 2. ILUMINACIÓN
+    scene.add(new THREE.HemisphereLight(
+      0xc8e5ff, 0x566344, 2.0
+    ));
+
+    const sun = new THREE.DirectionalLight(0xffe4b5, 3.0);
+    sun.position.set(-45, 70, 30);
+    sun.castShadow = true;
+    sun.shadow.mapSize.set(1024, 1024);
+    sun.shadow.camera.left = -45;
+    sun.shadow.camera.right = 45;
+    sun.shadow.camera.top = 45;
+    sun.shadow.camera.bottom = -45;
+    sun.shadow.normalBias = 0.04;
+    scene.add(sun);
+
+    // 3. TERRENO PROCEDURAL
+    function terrainHeight(x, z) {
+      return (
+        Math.sin(x * 0.035) * 2.5 +
+        Math.cos(z * 0.045) * 2.0 +
+        Math.sin((x + z) * 0.025) * 3.0 +
+        Math.cos(x * 0.09 + z * 0.04) * 0.6
+      );
+    }
+
+    const size = 300;
+    const divisions = 180;
+    const terrainGeometry = new THREE.PlaneGeometry(
+      size, size, divisions, divisions
+    );
+
+    terrainGeometry.rotateX(-Math.PI / 2);
+
+    const vertices = terrainGeometry.attributes.position;
+
+    for (let i = 0; i < vertices.count; i++) {
+      const x = vertices.getX(i);
+      const z = vertices.getZ(i);
+      vertices.setY(i, terrainHeight(x, z));
+    }
+
+    terrainGeometry.computeVertexNormals();
+
+    const terrain = new THREE.Mesh(
+      terrainGeometry,
+      new THREE.MeshStandardMaterial({
+        color: 0x68865a,
+        roughness: 1
+      })
+    );
+
+    terrain.receiveShadow = true;
+    scene.add(terrain);
+
+    // 4. ÁRBOLES
+    const trunkGeometry = new THREE.CylinderGeometry(
+      0.16, 0.25, 2.3, 7
+    );
+
+    const leafGeometry = new THREE.ConeGeometry(1.15, 3.5, 8);
+
+    const trunkMaterial = new THREE.MeshStandardMaterial({
+      color: 0x62452e, roughness: 1
+    });
+
+    const leafMaterial = new THREE.MeshStandardMaterial({
+      color: 0x345d39, roughness: 1
+    });
+
+    let seed = 12345;
+
+    function random() {
+      seed = (seed * 16807) % 2147483647;
+      return (seed - 1) / 2147483646;
+    }
+
+    for (let i = 0; i < 380; i++) {
+      const x = (random() - 0.5) * 260;
+      const z = (random() - 0.5) * 260;
+
+      // Dejar libre la zona inicial.
+      if (Math.hypot(x, z) < 9) continue;
+
+      const tree = new THREE.Group();
+      const h = terrainHeight(x, z);
+
+      const trunk = new THREE.Mesh(
+        trunkGeometry, trunkMaterial
+      );
+      trunk.position.y = 1.15;
+      trunk.castShadow = true;
+      tree.add(trunk);
+
+      const leaves = new THREE.Mesh(
+        leafGeometry, leafMaterial
+      );
+      leaves.position.y = 3.4;
+      leaves.castShadow = true;
+      tree.add(leaves);
+
+      const scale = 0.7 + random() * 0.8;
+      tree.scale.setScalar(scale);
+      tree.position.set(x, h, z);
+      scene.add(tree);
+    }
+
+    // 5. PERSONAJE PROVISIONAL
+    const player = new THREE.Group();
+
+    const skin = new THREE.MeshStandardMaterial({
+      color: 0xd3a17b, roughness: 0.85
+    });
+
+    const clothes = new THREE.MeshStandardMaterial({
+      color: 0x354c60, roughness: 0.95
+    });
+
+    const body = new THREE.Mesh(
+      new THREE.CapsuleGeometry(0.42, 0.9, 4, 8),
+      clothes
+    );
+    body.position.y = 1.15;
+    body.castShadow = true;
+    player.add(body);
+
+    const head = new THREE.Mesh(
+      new THREE.SphereGeometry(0.29, 16, 12),
+      skin
+    );
+    head.position.y = 2.05;
+    head.castShadow = true;
+    player.add(head);
+
+    player.position.set(0, terrainHeight(0, 0), 0);
+    scene.add(player);
+
+    // 6. CONTROLES
+    const keys = {};
+    let yaw = 0;
+    let pitch = 0.25;
+    let mouseLocked = false;
+
+    window.addEventListener('keydown', e => {
+      keys[e.code] = true;
+
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD',
+           'ArrowUp', 'ArrowDown',
+           'ArrowLeft', 'ArrowRight'].includes(e.code)) {
+        e.preventDefault();
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      keys[e.code] = false;
+    });
+
+    document.addEventListener('pointerlockchange', () => {
+      mouseLocked =
+        document.pointerLockElement === renderer.domElement;
+
+      document.getElementById('start').style.display =
+        mouseLocked ? 'none' : 'grid';
+    });
+
+    document.getElementById('play').addEventListener('click', () => {
+      renderer.domElement.requestPointerLock();
+    });
+
+    document.addEventListener('mousemove', e => {
+      if (!mouseLocked) return;
+
+      yaw -= e.movementX * 0.0025;
+      pitch -= e.movementY * 0.002;
+      pitch = THREE.MathUtils.clamp(pitch, -0.15, 0.8);
+    });
+
+    // 7. CÁMARA Y BUCLE DEL JUEGO
+    const clock = new THREE.Clock();
+    const direction = new THREE.Vector3();
+    const forward = new THREE.Vector3();
+    const right = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+
+      const dt = Math.min(clock.getDelta(), 0.05);
+
+      forward.set(-Math.sin(yaw), 0, -Math.cos(yaw));
+      right.set(Math.cos(yaw), 0, -Math.sin(yaw));
+
+      direction.set(0, 0, 0);
+
+      if (keys.KeyW || keys.ArrowUp) direction.add(forward);
+      if (keys.KeyS || keys.ArrowDown) direction.sub(forward);
+      if (keys.KeyD || keys.ArrowRight) direction.add(right);
+      if (keys.KeyA || keys.ArrowLeft) direction.sub(right);
+
+      if (direction.lengthSq() > 0) {
+        direction.normalize();
+
+        const speed = 7;
+        player.position.x += direction.x * speed * dt;
+        player.position.z += direction.z * speed * dt;
+
+        player.rotation.y = Math.atan2(
+          direction.x, direction.z
+        );
+      }
+
+      // Mantener al personaje sobre el terreno.
+      player.position.y = terrainHeight(
+        player.position.x, player.position.z
+      );
+
+      // Cámara detrás y ligeramente por encima.
+      const distance = 7;
+      const target = new THREE.Vector3(
+        player.position.x,
+        player.position.y + 1.5,
+        player.position.z
+      );
+
+      const horizontal = Math.cos(pitch) * distance;
+
+      camera.position.set(
+        target.x + Math.sin(yaw) * horizontal,
+        target.y + 2.2 + Math.sin(pitch) * distance,
+        target.z + Math.cos(yaw) * horizontal
+      );
+
+      camera.lookAt(target);
+
+      document.getElementById('position').textContent =
+        `Posición: ${player.position.x.toFixed(1)}, ` +
+        `${player.position.z.toFixed(1)}`;
+
+      renderer.render(scene, camera);
+    }
+
+    animate();
+
+    window.addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>
